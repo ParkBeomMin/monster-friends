@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createUnitState, selectTarget, resolveAttack } from './combat'
+import { createUnitState, selectTarget, resolveAttack, simulateBattle } from './combat'
 import type { UnitDef } from './types'
 
 const slime: UnitDef = {
@@ -65,5 +65,35 @@ describe('resolveAttack', () => {
     expect(target.hp).toBe(0)
     expect(target.alive).toBe(false)
     expect(events).toContainEqual({ type: 'death', tick: 5, unit: 'B#0' })
+  })
+})
+
+const strong: UnitDef = { id: 'ogre', name: '오크', role: 'tank', faction: 'rock', maxHp: 100, attack: 50, attackInterval: 1 }
+const weak: UnitDef = { id: 'pixie', name: '픽시', role: 'ranged', faction: 'fairy', maxHp: 40, attack: 10, attackInterval: 1 }
+const pacifist: UnitDef = { id: 'rock', name: '돌', role: 'tank', faction: 'rock', maxHp: 100, attack: 0, attackInterval: 1 }
+
+describe('simulateBattle', () => {
+  it('the stronger single unit wins a 1v1', () => {
+    const result = simulateBattle([strong], [weak])
+    expect(result.winner).toBe('A')
+  })
+
+  it('emits a final end event matching the winner', () => {
+    const result = simulateBattle([strong], [weak])
+    const last = result.events[result.events.length - 1]
+    expect(last).toEqual({ type: 'end', tick: result.ticks, winner: 'A' })
+  })
+
+  it('is deterministic — identical inputs produce identical event logs', () => {
+    const a = simulateBattle([strong, weak], [weak, strong])
+    const b = simulateBattle([strong, weak], [weak, strong])
+    expect(a.events).toEqual(b.events)
+    expect(a.winner).toBe(b.winner)
+  })
+
+  it('declares a draw when nobody can kill before maxTicks', () => {
+    const result = simulateBattle([pacifist], [pacifist], { maxTicks: 20 })
+    expect(result.winner).toBe('draw')
+    expect(result.ticks).toBe(20)
   })
 })

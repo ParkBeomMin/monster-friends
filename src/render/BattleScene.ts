@@ -44,12 +44,15 @@ export class BattleScene extends Phaser.Scene {
 
   private playEvents() {
     let i = 0
-    this.time.addEvent({
+    const timer = this.time.addEvent({
       delay: TICK_MS,
       loop: true,
       callback: () => {
-        if (i >= this.result.events.length) return
-        // Apply all events belonging to the current tick step, one per timer fire.
+        if (i >= this.result.events.length) {
+          timer.remove()
+          return
+        }
+        // Play back one event per timer fire; cadence is per-event, not per simulation tick.
         const ev = this.result.events[i++]
         this.applyEvent(ev)
       },

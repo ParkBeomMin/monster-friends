@@ -1,60 +1,68 @@
 import Phaser from 'phaser'
-import type { BattleEvent, BattleResult, UnitDef } from '../engine/types'
+import type { BattleEvent, BattleResult, Placement, TeamId, UnitDef } from '../engine/types'
 import { simulateBattle } from '../engine/combat'
-import { DEMO_TEAM_A, DEMO_TEAM_B } from '../data/units'
+import { ENEMY_PLACEMENTS, PLAYER_POOL } from '../data/units'
+import { slotXY, LOGICAL_W } from './layout'
 
-const TICK_MS = 400 // playback speed: one battle tick every 400ms
+const TICK_MS = 350
 
 interface UnitView {
-  def: UnitDef
   maxHp: number
   hp: number
   box: Phaser.GameObjects.Rectangle
-  label: Phaser.GameObjects.Text
   hpText: Phaser.GameObjects.Text
+  label: Phaser.GameObjects.Text
 }
+
+// Default player squad if the scene is started without placement data.
+const DEMO_PLAYER: Placement[] = [
+  { def: PLAYER_POOL[0], pos: { row: 'front', col: 1 } },
+  { def: PLAYER_POOL[1], pos: { row: 'front', col: 0 } },
+  { def: PLAYER_POOL[2], pos: { row: 'back', col: 1 } },
+]
 
 export class BattleScene extends Phaser.Scene {
   private views = new Map<string, UnitView>()
-  private result!: BattleResult
+  private player: Placement[] = DEMO_PLAYER
 
   constructor() {
     super('Battle')
   }
 
-  create() {
-    this.result = simulateBattle(DEMO_TEAM_A, DEMO_TEAM_B)
-    this.drawTeam(DEMO_TEAM_A, 'A', 200, 0x00aa66)
-    this.drawTeam(DEMO_TEAM_B, 'B', 600, 0xaa4444)
-    this.playEvents()
+  init(data: { placements?: Placement[] }) {
+    this.player = data.placements && data.placements.length > 0 ? data.placements : DEMO_PLAYER
+    this.views = new Map()
   }
 
-  private drawTeam(team: UnitDef[], teamId: 'A' | 'B', x: number, color: number) {
-    team.forEach((def, slot) => {
-      const y = 150 + slot * 120
-      const box = this.add.rectangle(x, y, 90, 70, color)
-      const label = this.add.text(x - 40, y - 55, def.name, { fontSize: '14px', color: '#fff' })
-      const hpText = this.add.text(x - 40, y + 40, `${def.maxHp}/${def.maxHp}`, {
-        fontSize: '12px',
-        color: '#ffd',
-      })
-      this.views.set(`${teamId}#${slot}`, { def, maxHp: def.maxHp, hp: def.maxHp, box, label, hpText })
+  create() {
+    const result: BattleResult = simulateBattle(this.player, ENEMY_PLACEMENTS)
+    this.drawTeam(this.player, 'A', 0x00aa66)
+    this.drawTeam(ENEMY_PLACEMENTS, 'B', 0xaa4444)
+    this.playEvents(result)
+  }
+
+  private drawTeam(placements: Placement[], team: TeamId, color: number) {
+    placements.forEach((p, i) => {
+      const def: UnitDef = p.def
+      const { x, y } = slotXY(team, p.pos.row, p.pos.col)
+      const box = this.add.rectangle(x, y, 84, 64, color)
+      const label = this.add.text(x - 40, y - 52, def.name, { fontSize: '15px', color: '#fff' })
+      const hpText = this.add.text(x - 40, y + 38, `${def.maxHp}/${def.maxHp}`, { fontSize: '13px', color: '#ffd' })
+      this.views.set(`${team}#${i}`, { maxHp: def.maxHp, hp: def.maxHp, box, hpText, label })
     })
   }
 
-  private playEvents() {
+  private playEvents(result: BattleResult) {
     let i = 0
     const timer = this.time.addEvent({
       delay: TICK_MS,
       loop: true,
       callback: () => {
-        if (i >= this.result.events.length) {
+        if (i >= result.events.length) {
           timer.remove()
           return
         }
-        // Play back one event per timer fire; cadence is per-event, not per simulation tick.
-        const ev = this.result.events[i++]
-        this.applyEvent(ev)
+        this.applyEvent(result.events[i++])
       },
     })
   }
@@ -65,7 +73,7 @@ export class BattleScene extends Phaser.Scene {
       if (view) {
         view.hp = ev.targetHpAfter
         view.hpText.setText(`${view.hp}/${view.maxHp}`)
-        this.tweens.add({ targets: view.box, alpha: 0.4, yoyo: true, duration: 100 })
+        this.tweens.add({ targets: view.box, alpha: 0.4, yoyo: true, duration: 90 })
       }
     } else if (ev.type === 'death') {
       const view = this.views.get(ev.unit)
@@ -74,8 +82,8 @@ export class BattleScene extends Phaser.Scene {
         view.label.setColor('#777')
       }
     } else if (ev.type === 'end') {
-      const text = ev.winner === 'draw' ? '무승부' : `승자: ${ev.winner}팀`
-      this.add.text(300, 20, text, { fontSize: '28px', color: '#ffff88' })
+      const text = ev.winner === 'draw' ? '무승부' : ev.winner === 'A' ? '승리!' : '패배...'
+      this.add.text(LOGICAL_W / 2 - 60, 24, text, { fontSize: '32px', color: '#ffff88' })
     }
   }
 }

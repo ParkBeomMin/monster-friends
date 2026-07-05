@@ -24,6 +24,7 @@ export class PlacementScene extends Phaser.Scene {
     this.selected = null
     this.placed = new Map()
     this.slots = []
+    this.poolTexts = []
 
     this.add.text(LOGICAL_W / 2 - 130, 16, '스쿼드 배치', { fontSize: '26px', color: '#fff' })
 

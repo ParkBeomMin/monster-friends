@@ -1,4 +1,5 @@
 import Phaser from 'phaser'
+import { PlacementScene } from './render/PlacementScene'
 import { BattleScene } from './render/BattleScene'
 import { LOGICAL_W, LOGICAL_H } from './render/layout'
 
@@ -12,5 +13,5 @@ new Phaser.Game({
     width: LOGICAL_W,
     height: LOGICAL_H,
   },
-  scene: [BattleScene],
+  scene: [PlacementScene, BattleScene],
 })

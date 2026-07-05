@@ -1,11 +1,17 @@
-import type { UnitDef, UnitState, TeamId, BattleEvent, BattleResult } from './types'
+import type { UnitDef, UnitState, TeamId, BattleEvent, BattleResult, Position } from './types'
 
-export function createUnitState(def: UnitDef, team: TeamId, slot: number): UnitState {
+export function createUnitState(
+  def: UnitDef,
+  team: TeamId,
+  slot: number,
+  pos: Position = { row: 'front', col: slot },
+): UnitState {
   return {
     instanceId: `${team}#${slot}`,
     def,
     team,
     slot,
+    pos,
     hp: def.maxHp,
     cooldown: def.attackInterval,
     alive: true,
@@ -13,10 +19,16 @@ export function createUnitState(def: UnitDef, team: TeamId, slot: number): UnitS
 }
 
 export function selectTarget(attacker: UnitState, units: UnitState[]): UnitState | null {
-  const enemies = units
-    .filter((u) => u.team !== attacker.team && u.alive)
-    .sort((a, b) => a.slot - b.slot)
-  return enemies[0] ?? null
+  const enemies = units.filter((u) => u.team !== attacker.team && u.alive)
+  if (enemies.length === 0) return null
+  const frontRow = enemies.filter((e) => e.pos.row === 'front')
+  const backRow = enemies.filter((e) => e.pos.row === 'back')
+  const isMelee = attacker.def.role === 'tank' || attacker.def.role === 'melee'
+  // Melee is walled by the front row; ranged/support snipe the back row first.
+  const pool = isMelee
+    ? frontRow.length > 0 ? frontRow : backRow
+    : backRow.length > 0 ? backRow : frontRow
+  return [...pool].sort((a, b) => (a.pos.col !== b.pos.col ? a.pos.col - b.pos.col : a.slot - b.slot))[0]
 }
 
 export function resolveAttack(

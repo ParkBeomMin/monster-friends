@@ -2,6 +2,16 @@ export type Role = 'tank' | 'melee' | 'ranged' | 'support'
 export type Faction = 'mushroom' | 'fairy' | 'rock' | 'toy' | 'snow'
 export type TeamId = 'A' | 'B'
 
+export type Row = 'front' | 'back'
+export interface Position {
+  row: Row
+  col: number
+}
+export interface Placement {
+  def: UnitDef
+  pos: Position
+}
+
 export interface UnitDef {
   id: string
   name: string
@@ -17,6 +27,7 @@ export interface UnitState {
   def: UnitDef
   team: TeamId
   slot: number
+  pos: Position // board position; targeting depends on it
   hp: number
   cooldown: number // ticks remaining until next attack
   alive: boolean

@@ -97,3 +97,40 @@ describe('simulateBattle', () => {
     expect(result.ticks).toBe(20)
   })
 })
+
+import type { Position } from './types'
+
+const tankDef: UnitDef = { id: 't', name: '탱', role: 'tank', faction: 'rock', maxHp: 100, attack: 10, attackInterval: 1 }
+const archerDef: UnitDef = { id: 'a', name: '궁', role: 'ranged', faction: 'fairy', maxHp: 50, attack: 10, attackInterval: 1 }
+const front = (col: number): Position => ({ row: 'front', col })
+const back = (col: number): Position => ({ row: 'back', col })
+
+describe('selectTarget with positions', () => {
+  it('melee/tank targets the front row even if a back-row enemy has a lower col', () => {
+    const attacker = createUnitState(tankDef, 'A', 0, front(0))
+    const enemyBack = createUnitState(archerDef, 'B', 0, back(0)) // lower col
+    const enemyFront = createUnitState(tankDef, 'B', 1, front(2)) // higher col but front
+    const target = selectTarget(attacker, [attacker, enemyBack, enemyFront])
+    expect(target?.instanceId).toBe('B#1') // the front one
+  })
+
+  it('ranged targets the back row first (snipes past the front)', () => {
+    const attacker = createUnitState(archerDef, 'A', 0, front(0))
+    const enemyFront = createUnitState(tankDef, 'B', 0, front(0))
+    const enemyBack = createUnitState(archerDef, 'B', 1, back(0))
+    const target = selectTarget(attacker, [attacker, enemyFront, enemyBack])
+    expect(target?.instanceId).toBe('B#1') // the back one
+  })
+
+  it('melee falls back to the back row when the front row is empty', () => {
+    const attacker = createUnitState(tankDef, 'A', 0, front(0))
+    const enemyBack = createUnitState(archerDef, 'B', 0, back(1))
+    const target = selectTarget(attacker, [attacker, enemyBack])
+    expect(target?.instanceId).toBe('B#0')
+  })
+
+  it('createUnitState defaults to front row at col = slot when pos omitted', () => {
+    const u = createUnitState(tankDef, 'A', 2)
+    expect(u.pos).toEqual({ row: 'front', col: 2 })
+  })
+})

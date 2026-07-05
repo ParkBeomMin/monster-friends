@@ -1,4 +1,4 @@
-import type { UnitDef, UnitState, TeamId, BattleEvent, BattleResult, Position } from './types'
+import type { UnitDef, UnitState, TeamId, BattleEvent, BattleResult, Position, Placement } from './types'
 
 export function createUnitState(
   def: UnitDef,
@@ -55,15 +55,27 @@ export function resolveAttack(
   return events
 }
 
+type TeamInput = UnitDef | Placement
+
+function toPlacement(item: TeamInput, index: number): Placement {
+  return 'def' in item ? item : { def: item, pos: { row: 'front', col: index } }
+}
+
 export function simulateBattle(
-  teamA: UnitDef[],
-  teamB: UnitDef[],
+  teamA: TeamInput[],
+  teamB: TeamInput[],
   opts: { maxTicks?: number } = {},
 ): BattleResult {
   const maxTicks = opts.maxTicks ?? 1000
   const units: UnitState[] = [
-    ...teamA.map((def, i) => createUnitState(def, 'A', i)),
-    ...teamB.map((def, i) => createUnitState(def, 'B', i)),
+    ...teamA.map((it, i) => {
+      const p = toPlacement(it, i)
+      return createUnitState(p.def, 'A', i, p.pos)
+    }),
+    ...teamB.map((it, i) => {
+      const p = toPlacement(it, i)
+      return createUnitState(p.def, 'B', i, p.pos)
+    }),
   ]
   const events: BattleEvent[] = []
   const teamAlive = (t: TeamId) => units.some((u) => u.team === t && u.alive)

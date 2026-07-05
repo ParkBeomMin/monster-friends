@@ -134,3 +134,35 @@ describe('selectTarget with positions', () => {
     expect(u.pos).toEqual({ row: 'front', col: 2 })
   })
 })
+
+import type { Placement } from './types'
+
+describe('simulateBattle with placement', () => {
+  // Same three units; only the player's positions differ.
+  const glassCannon: UnitDef = { id: 'gc', name: '유리대포', role: 'ranged', faction: 'fairy', maxHp: 30, attack: 40, attackInterval: 1 }
+  const wall: UnitDef = { id: 'w', name: '방벽', role: 'tank', faction: 'rock', maxHp: 300, attack: 5, attackInterval: 1 }
+  const enemyBruiser: Placement[] = [
+    { def: { id: 'br', name: '싸움꾼', role: 'melee', faction: 'rock', maxHp: 120, attack: 30, attackInterval: 1 }, pos: { row: 'front', col: 0 } },
+  ]
+
+  it('protecting the glass cannon behind a wall changes the outcome vs exposing it', () => {
+    const protectedTeam: Placement[] = [
+      { def: wall, pos: { row: 'front', col: 0 } },
+      { def: glassCannon, pos: { row: 'back', col: 0 } },
+    ]
+    const exposedTeam: Placement[] = [
+      { def: wall, pos: { row: 'back', col: 0 } },
+      { def: glassCannon, pos: { row: 'front', col: 0 } },
+    ]
+    const protectedResult = simulateBattle(protectedTeam, enemyBruiser)
+    const exposedResult = simulateBattle(exposedTeam, enemyBruiser)
+    // Different positioning must produce a different battle.
+    expect(protectedResult.events).not.toEqual(exposedResult.events)
+  })
+
+  it('still accepts plain UnitDef[] (back-compat) and stays deterministic', () => {
+    const a = simulateBattle([wall], [glassCannon])
+    const b = simulateBattle([wall], [glassCannon])
+    expect(a.events).toEqual(b.events)
+  })
+})

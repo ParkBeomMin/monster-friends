@@ -114,23 +114,23 @@ export class BattleScene extends Phaser.Scene {
 
   private drawSkills() {
     const baseX = 8
-    let y = 360
+    let y = 396
     SKILL_NAMES.forEach((name, i) => {
       const used = i < this.state.skillsUsed.A
       const available = !this.state.winner && nextSkillIndex(this.state, 'A') === i
       const label = used ? `✔ ${name}` : available ? `▶ ${name}` : `🔒 ${name}`
       const color = used ? 0x333333 : available ? 0x4a6a2a : 0x2a2a2a
-      const btn = this.track(this.add.rectangle(baseX + 70, y, 140, 34, color).setStrokeStyle(1, 0x557755))
+      const btn = this.track(this.add.rectangle(baseX + 70, y, 140, 30, color).setStrokeStyle(1, 0x557755))
       this.track(this.add.text(baseX + 8, y - 9, label, { fontSize: '13px', color: '#dfd' }))
       if (available) {
         btn.setInteractive()
         btn.on('pointerdown', () => this.onSkillTap(i))
       }
-      y += 42
+      y += 34
     })
     // Desperation once all 3 skills are spent.
     if (!this.state.winner && this.state.skillsUsed.A >= 3) {
-      const btn = this.track(this.add.rectangle(baseX + 70, y, 140, 34, 0x6a2a2a).setStrokeStyle(1, 0xaa5555))
+      const btn = this.track(this.add.rectangle(baseX + 70, y, 140, 30, 0x6a2a2a).setStrokeStyle(1, 0xaa5555))
       this.track(this.add.text(baseX + 8, y - 9, '💥 결단', { fontSize: '13px', color: '#fdd' }))
       btn.setInteractive()
       btn.on('pointerdown', () => this.onDesperationTap())

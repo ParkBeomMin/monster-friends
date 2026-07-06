@@ -182,7 +182,27 @@ function chooseAiCell(
   })[0]
 }
 
+function aiSkillLane(state: BattleState): number {
+  // Lane with the most player (A) units; ties → lowest lane index.
+  let best = 0
+  let bestCount = -1
+  for (let lane = 0; lane < state.config.lanes; lane++) {
+    const count = state.units.filter((u) => u.alive && u.team === 'A' && u.lane === lane).length
+    if (count > bestCount) {
+      bestCount = count
+      best = lane
+    }
+  }
+  return best
+}
+
 function aiTurn(state: BattleState, events: BattleEvent[]): void {
+  const skillIdx = nextSkillIndex(state, 'B')
+  if (skillIdx !== null) {
+    const lane = skillIdx === 0 ? aiSkillLane(state) : 0
+    applySkill(state, 'B', skillIdx, lane, events)
+  }
+  if (state.winner) return
   drawToHand(state, 'B')
   if (state.hands.B.length > 0) {
     const cell = chooseAiCell(state)
@@ -299,5 +319,32 @@ export function usePlayerSkill(state: BattleState, targetLane?: number): BattleE
     if (targetLane === undefined || targetLane < 0 || targetLane >= state.config.lanes) return events
   }
   applySkill(state, 'A', idx, targetLane ?? 0, events)
+  return events
+}
+
+const DESP_HERO_BASE = 25
+const DESP_HERO_STEP = 15
+const DESP_SELF_BASE = 12
+const DESP_SELF_STEP = 8
+
+// Player-only "결단": strike the enemy hero at the cost of own hero HP; both escalate.
+export function usePlayerDesperation(state: BattleState): BattleEvent[] {
+  const events: BattleEvent[] = []
+  if (state.winner || state.active !== 'A') return events
+  if (state.skillsUsed.A < 3) return events
+  const d = state.desperations.A
+  const heroDamage = DESP_HERO_BASE + DESP_HERO_STEP * d
+  const selfCost = DESP_SELF_BASE + DESP_SELF_STEP * d
+  state.heroHp.B = Math.max(0, state.heroHp.B - heroDamage)
+  state.heroHp.A = Math.max(0, state.heroHp.A - selfCost)
+  state.desperations.A += 1
+  events.push({ type: 'desperation', team: 'A', heroDamage, selfCost })
+  if (state.heroHp.B <= 0) {
+    state.winner = 'A'
+    events.push({ type: 'end', winner: 'A' })
+  } else if (state.heroHp.A <= 0) {
+    state.winner = 'B'
+    events.push({ type: 'end', winner: 'B' })
+  }
   return events
 }

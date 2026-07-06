@@ -195,3 +195,57 @@ describe('commander skills 1-3', () => {
     expect(s.skillsUsed.A).toBe(0)
   })
 })
+
+import { usePlayerDesperation, playerDeploy as pd2 } from './battle'
+
+describe('desperation + AI skills', () => {
+  it('desperation is unavailable until all 3 skills are used', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.skillsUsed.A = 2
+    const before = { ...s.heroHp }
+    usePlayerDesperation(s)
+    expect(s.heroHp.B).toBe(before.B) // no-op
+  })
+
+  it('desperation damages enemy hero and costs own hero HP, escalating', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.skillsUsed.A = 3
+    usePlayerDesperation(s) // d=0: 25 to B, 12 to A
+    expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - 25)
+    expect(s.heroHp.A).toBe(DEFAULT_CONFIG.heroHp - 12)
+    usePlayerDesperation(s) // d=1: 40 to B, 20 to A
+    expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - 25 - 40)
+    expect(s.heroHp.A).toBe(DEFAULT_CONFIG.heroHp - 12 - 20)
+    expect(s.desperations.A).toBe(2)
+  })
+
+  it('desperation that drops own hero to 0 loses the game', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.skillsUsed.A = 3
+    s.heroHp.A = 10
+    s.heroHp.B = 999
+    usePlayerDesperation(s) // self cost 12 >= 10
+    expect(s.heroHp.A).toBe(0)
+    expect(s.winner).toBe('B')
+  })
+
+  it('the AI uses its unlocked skill during its turn', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    // Advance to a turn where B has a skill unlocked, then let a player action drive B's turn.
+    s.turn = SKILL_UNLOCK_TURN[0]
+    pd2(s, 0, 0, 0)
+    expect(s.skillsUsed.B).toBeGreaterThanOrEqual(1)
+  })
+
+  it('stays deterministic with skills + desperation scripted', () => {
+    const run = () => {
+      const s = createBattle(deck(8), deck(8), 55)
+      const log: unknown[] = []
+      s.turn = SKILL_UNLOCK_TURN[0]
+      log.push(...usePlayerSkill(s, 0))
+      log.push(...pd2(s, 0, 1, 0))
+      return { log, hero: { ...s.heroHp }, winner: s.winner }
+    }
+    expect(run()).toEqual(run())
+  })
+})

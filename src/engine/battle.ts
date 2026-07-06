@@ -149,3 +149,71 @@ export function resolveCombat(state: BattleState, team: TeamId, events: BattleEv
     }
   }
 }
+
+function drawToHand(state: BattleState, team: TeamId): void {
+  while (state.hands[team].length < state.config.handSize && state.decks[team].length > 0) {
+    state.hands[team].push(state.decks[team].shift()!)
+  }
+}
+
+function chooseAiCell(
+  state: BattleState,
+): { lane: number; col: number } | null {
+  const cells = emptyCells(state, 'B')
+  if (cells.length === 0) return null
+  // Prefer the lane with the most enemy (A) units; break ties by lowest lane,
+  // then frontmost (lowest col). Fully deterministic.
+  const enemyCountInLane = (lane: number) =>
+    state.units.filter((u) => u.alive && u.team === 'A' && u.lane === lane).length
+  return [...cells].sort((a, b) => {
+    const da = enemyCountInLane(b.lane) - enemyCountInLane(a.lane)
+    if (da !== 0) return da
+    if (a.lane !== b.lane) return a.lane - b.lane
+    return a.col - b.col
+  })[0]
+}
+
+function aiTurn(state: BattleState, events: BattleEvent[]): void {
+  drawToHand(state, 'B')
+  if (state.hands.B.length > 0) {
+    const cell = chooseAiCell(state)
+    if (cell) deployUnit(state, 'B', 0, cell.lane, cell.col, events)
+  }
+  resolveCombat(state, 'B', events)
+}
+
+function finishByHero(state: BattleState, events: BattleEvent[]): void {
+  const winner: TeamId | 'draw' =
+    state.heroHp.A > state.heroHp.B ? 'A' : state.heroHp.B > state.heroHp.A ? 'B' : 'draw'
+  state.winner = winner
+  events.push({ type: 'end', winner })
+}
+
+export function playerDeploy(
+  state: BattleState,
+  handIndex: number,
+  lane: number,
+  col: number,
+): BattleEvent[] {
+  const events: BattleEvent[] = []
+  if (state.winner || state.active !== 'A') return events
+  if (handIndex < 0 || handIndex >= state.hands.A.length) return events
+  const occupied = state.units.some(
+    (u) => u.alive && u.team === 'A' && u.lane === lane && u.col === col,
+  )
+  if (occupied) return events
+
+  deployUnit(state, 'A', handIndex, lane, col, events)
+  resolveCombat(state, 'A', events)
+  if (state.winner) return events
+
+  state.active = 'B'
+  aiTurn(state, events)
+  if (state.winner) return events
+
+  state.turn += 1
+  state.active = 'A'
+  drawToHand(state, 'A')
+  if (state.turn > state.config.maxTurns) finishByHero(state, events)
+  return events
+}

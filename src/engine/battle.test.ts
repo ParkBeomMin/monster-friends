@@ -75,3 +75,37 @@ describe('deployUnit + resolveCombat', () => {
     expect(ev).toContainEqual({ type: 'end', winner: 'A' })
   })
 })
+
+import { playerDeploy } from './battle'
+
+describe('playerDeploy turn flow', () => {
+  it('rejects a deploy onto an occupied cell (no-op)', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    playerDeploy(s, 0, 0, 0)
+    const unitsAfterFirst = s.units.filter((u) => u.team === 'A').length
+    // Try to place onto the same A cell again — should be rejected.
+    playerDeploy(s, 0, 0, 0)
+    // A only ever deploys 1 unit per its turn; occupied-cell reject must not add another at (0,0).
+    expect(s.units.filter((u) => u.team === 'A' && u.lane === 0 && u.col === 0).length).toBe(1)
+  })
+
+  it('runs the enemy turn automatically after the player deploys', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    playerDeploy(s, 0, 0, 0)
+    expect(s.units.some((u) => u.team === 'B')).toBe(true) // AI deployed
+    expect(s.active).toBe('A') // back to player
+    expect(s.turn).toBe(2)
+  })
+
+  it('is fully deterministic — same seed + same actions gives identical event logs', () => {
+    const run = () => {
+      const s = createBattle(deck(8), deck(8), 77)
+      const log: unknown[] = []
+      log.push(...playerDeploy(s, 0, 0, 0))
+      log.push(...playerDeploy(s, 0, 1, 0))
+      log.push(...playerDeploy(s, 0, 2, 0))
+      return { log, winner: s.winner, heroB: s.heroHp.B }
+    }
+    expect(run()).toEqual(run())
+  })
+})

@@ -194,6 +194,16 @@ describe('commander skills 1-3', () => {
     usePlayerSkill(s, 0)
     expect(s.skillsUsed.A).toBe(0)
   })
+
+  it('a second usePlayerSkill in the same turn is a no-op even when the next skill is already unlocked', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = SKILL_UNLOCK_TURN[1] // skills 0 and 1 are both unlocked at this turn
+    usePlayerSkill(s, 0) // uses skill 0 (집중포화)
+    expect(s.skillsUsed.A).toBe(1)
+    usePlayerSkill(s) // skill 1 is already unlocked, but same turn — must be a no-op
+    expect(s.skillsUsed.A).toBe(1)
+    expect(s.atkBonus.A).toBe(0)
+  })
 })
 
 import { usePlayerDesperation, playerDeploy as pd2 } from './battle'
@@ -210,12 +220,18 @@ describe('desperation + AI skills', () => {
   it('desperation damages enemy hero and costs own hero HP, escalating', () => {
     const s = createBattle(deck(8), deck(8), 1)
     s.skillsUsed.A = 3
+    // Desperation now ends the player's turn and runs an AI turn in between.
+    // Neutralize B so its turn is a no-op, keeping the HP math clean.
+    s.hands.B = []
+    s.decks.B = []
+    s.skillsUsed.B = 3
+    s.heroHp.A = 1000 // high enough to survive both self-costs (12 + 20)
     usePlayerDesperation(s) // d=0: 25 to B, 12 to A
     expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - 25)
-    expect(s.heroHp.A).toBe(DEFAULT_CONFIG.heroHp - 12)
+    expect(s.heroHp.A).toBe(1000 - 12)
     usePlayerDesperation(s) // d=1: 40 to B, 20 to A
     expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - 25 - 40)
-    expect(s.heroHp.A).toBe(DEFAULT_CONFIG.heroHp - 12 - 20)
+    expect(s.heroHp.A).toBe(1000 - 12 - 20)
     expect(s.desperations.A).toBe(2)
   })
 
@@ -227,6 +243,15 @@ describe('desperation + AI skills', () => {
     usePlayerDesperation(s) // self cost 12 >= 10
     expect(s.heroHp.A).toBe(0)
     expect(s.winner).toBe('B')
+  })
+
+  it('usePlayerDesperation advances the turn, giving the AI a response round', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.skillsUsed.A = 3
+    const turnBefore = s.turn
+    usePlayerDesperation(s)
+    expect(s.turn).toBe(turnBefore + 1)
+    expect(s.active).toBe('A')
   })
 
   it('the AI uses its unlocked skill during its turn', () => {

@@ -50,6 +50,7 @@ export interface BattleState {
   atkBonus: { A: number; B: number }
   skillsUsed: { A: number; B: number }
   desperations: { A: number; B: number }
+  skillUsedThisTurn: boolean
 }
 
 export function enemyOf(team: TeamId): TeamId {
@@ -79,6 +80,7 @@ export function createBattle(
     atkBonus: { A: 0, B: 0 },
     skillsUsed: { A: 0, B: 0 },
     desperations: { A: 0, B: 0 },
+    skillUsedThisTurn: false,
   }
 }
 
@@ -222,6 +224,24 @@ function finishByHero(state: BattleState, events: BattleEvent[]): void {
   events.push({ type: 'end', winner })
 }
 
+// Ends the player's (A) turn: run the AI turn, advance to the next turn,
+// reset the per-turn skill flag, draw A's hand, and resolve soft-locks.
+function endPlayerTurn(state: BattleState, events: BattleEvent[]): void {
+  if (state.winner) return
+  state.active = 'B'
+  aiTurn(state, events)
+  if (state.winner) return
+  state.turn += 1
+  state.active = 'A'
+  state.skillUsedThisTurn = false
+  drawToHand(state, 'A')
+  if (state.turn > state.config.maxTurns) {
+    finishByHero(state, events)
+  } else if (!state.winner && state.skillsUsed.A < 3 && !hasLegalMove(state, 'A')) {
+    finishByHero(state, events)
+  }
+}
+
 export function playerDeploy(
   state: BattleState,
   handIndex: number,
@@ -241,18 +261,7 @@ export function playerDeploy(
   resolveCombat(state, 'A', events)
   if (state.winner) return events
 
-  state.active = 'B'
-  aiTurn(state, events)
-  if (state.winner) return events
-
-  state.turn += 1
-  state.active = 'A'
-  drawToHand(state, 'A')
-  if (state.turn > state.config.maxTurns) {
-    finishByHero(state, events)
-  } else if (!state.winner && !hasLegalMove(state, 'A')) {
-    finishByHero(state, events)
-  }
+  endPlayerTurn(state, events)
   return events
 }
 
@@ -313,12 +322,14 @@ function applySkill(
 export function usePlayerSkill(state: BattleState, targetLane?: number): BattleEvent[] {
   const events: BattleEvent[] = []
   if (state.winner || state.active !== 'A') return events
+  if (state.skillUsedThisTurn) return events
   const idx = nextSkillIndex(state, 'A')
   if (idx === null) return events
   if (idx === 0) {
     if (targetLane === undefined || targetLane < 0 || targetLane >= state.config.lanes) return events
   }
   applySkill(state, 'A', idx, targetLane ?? 0, events)
+  state.skillUsedThisTurn = true
   return events
 }
 
@@ -346,5 +357,6 @@ export function usePlayerDesperation(state: BattleState): BattleEvent[] {
     state.winner = 'B'
     events.push({ type: 'end', winner: 'B' })
   }
+  if (!state.winner) endPlayerTurn(state, events)
   return events
 }

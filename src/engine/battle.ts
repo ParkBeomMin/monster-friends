@@ -33,6 +33,8 @@ export type BattleEvent =
   | { type: 'heroDamage'; attacker: string; heroTeam: TeamId; damage: number; heroHpAfter: number }
   | { type: 'death'; instanceId: string }
   | { type: 'end'; winner: TeamId | 'draw' }
+  | { type: 'skill'; team: TeamId; skillIndex: number; targetLane?: number }
+  | { type: 'desperation'; team: TeamId; heroDamage: number; selfCost: number }
 
 export interface BattleState {
   config: BattleConfig
@@ -45,6 +47,9 @@ export interface BattleState {
   winner: TeamId | 'draw' | null
   rng: Rng
   nextInstance: number
+  atkBonus: { A: number; B: number }
+  skillsUsed: { A: number; B: number }
+  desperations: { A: number; B: number }
 }
 
 export function enemyOf(team: TeamId): TeamId {
@@ -71,6 +76,9 @@ export function createBattle(
     winner: null,
     rng,
     nextInstance: 0,
+    atkBonus: { A: 0, B: 0 },
+    skillsUsed: { A: 0, B: 0 },
+    desperations: { A: 0, B: 0 },
   }
 }
 
@@ -118,14 +126,15 @@ export function resolveCombat(state: BattleState, team: TeamId, events: BattleEv
 
   for (const actor of actors) {
     if (!actor.alive || state.winner) continue
+    const damage = actor.def.attack + state.atkBonus[team]
     const foe = frontmostEnemy(state, team, actor.lane)
     if (foe) {
-      foe.hp = Math.max(0, foe.hp - actor.def.attack)
+      foe.hp = Math.max(0, foe.hp - damage)
       events.push({
         type: 'attack',
         attacker: actor.instanceId,
         target: foe.instanceId,
-        damage: actor.def.attack,
+        damage,
         targetHpAfter: foe.hp,
       })
       if (foe.hp <= 0 && foe.alive) {
@@ -134,12 +143,12 @@ export function resolveCombat(state: BattleState, team: TeamId, events: BattleEv
       }
     } else {
       const heroTeam = enemyOf(team)
-      state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - actor.def.attack)
+      state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - damage)
       events.push({
         type: 'heroDamage',
         attacker: actor.instanceId,
         heroTeam,
-        damage: actor.def.attack,
+        damage,
         heroHpAfter: state.heroHp[heroTeam],
       })
       if (state.heroHp[heroTeam] <= 0) {
@@ -224,5 +233,71 @@ export function playerDeploy(
   } else if (!state.winner && !hasLegalMove(state, 'A')) {
     finishByHero(state, events)
   }
+  return events
+}
+
+export const SKILL_UNLOCK_TURN = [2, 4, 6]
+export const SKILL_NAMES = ['집중포화', '진군나팔', '최후의일격']
+const SKILL1_LANE_DAMAGE = 18
+const SKILL2_ATK_BONUS = 6
+const SKILL3_HERO_DAMAGE = 45
+
+// The next usable skill index for a team, or null if none is unlocked yet.
+export function nextSkillIndex(state: BattleState, team: TeamId): number | null {
+  const used = state.skillsUsed[team]
+  if (used >= 3) return null
+  if (state.turn < SKILL_UNLOCK_TURN[used]) return null
+  return used
+}
+
+function applySkill(
+  state: BattleState,
+  team: TeamId,
+  skillIndex: number,
+  targetLane: number,
+  events: BattleEvent[],
+): void {
+  events.push({ type: 'skill', team, skillIndex, targetLane })
+  if (skillIndex === 0) {
+    const foes = state.units.filter(
+      (u) => u.alive && u.team === enemyOf(team) && u.lane === targetLane,
+    )
+    for (const foe of foes) {
+      foe.hp = Math.max(0, foe.hp - SKILL1_LANE_DAMAGE)
+      if (foe.hp <= 0 && foe.alive) {
+        foe.alive = false
+        events.push({ type: 'death', instanceId: foe.instanceId })
+      }
+    }
+  } else if (skillIndex === 1) {
+    state.atkBonus[team] += SKILL2_ATK_BONUS
+  } else if (skillIndex === 2) {
+    const heroTeam = enemyOf(team)
+    state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - SKILL3_HERO_DAMAGE)
+    events.push({
+      type: 'heroDamage',
+      attacker: `${team}:commander`,
+      heroTeam,
+      damage: SKILL3_HERO_DAMAGE,
+      heroHpAfter: state.heroHp[heroTeam],
+    })
+    if (state.heroHp[heroTeam] <= 0) {
+      state.winner = team
+      events.push({ type: 'end', winner: team })
+    }
+  }
+  state.skillsUsed[team] += 1
+}
+
+// Player (team A) uses their next unlocked skill. Skill 0 needs a targetLane.
+export function usePlayerSkill(state: BattleState, targetLane?: number): BattleEvent[] {
+  const events: BattleEvent[] = []
+  if (state.winner || state.active !== 'A') return events
+  const idx = nextSkillIndex(state, 'A')
+  if (idx === null) return events
+  if (idx === 0) {
+    if (targetLane === undefined || targetLane < 0 || targetLane >= state.config.lanes) return events
+  }
+  applySkill(state, 'A', idx, targetLane ?? 0, events)
   return events
 }

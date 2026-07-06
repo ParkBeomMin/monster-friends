@@ -138,3 +138,60 @@ describe('playerDeploy turn flow', () => {
     expect(s.winner).not.toBeNull()
   })
 })
+
+import { nextSkillIndex, usePlayerSkill, SKILL_UNLOCK_TURN } from './battle'
+import type { BattleEvent as BE } from './battle'
+
+describe('commander skills 1-3', () => {
+  it('skill index 0 is available only at/after its unlock turn', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = 1
+    expect(nextSkillIndex(s, 'A')).toBeNull()
+    s.turn = SKILL_UNLOCK_TURN[0]
+    expect(nextSkillIndex(s, 'A')).toBe(0)
+  })
+
+  it('skill 1 (집중포화) damages every enemy unit in the targeted lane', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = SKILL_UNLOCK_TURN[0]
+    const ev: BE[] = []
+    deployUnit(s, 'B', 0, 2, 0, ev) // enemy in lane 2 front
+    deployUnit(s, 'B', 0, 2, 1, ev) // enemy in lane 2 back
+    const foes = s.units.filter((u) => u.team === 'B' && u.lane === 2)
+    const before = foes.map((f) => f.hp)
+    usePlayerSkill(s, 2)
+    foes.forEach((f, i) => expect(f.hp).toBe(Math.max(0, before[i] - 18)))
+    expect(s.skillsUsed.A).toBe(1)
+  })
+
+  it('skill 2 (진군나팔) adds a persistent team attack bonus used in combat', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = SKILL_UNLOCK_TURN[1]
+    s.skillsUsed.A = 1 // skill 0 already used, so next is index 1
+    usePlayerSkill(s)
+    expect(s.atkBonus.A).toBe(6)
+    // a unit with attack 5 now deals 11 to the enemy hero (empty lane)
+    const ev: BE[] = []
+    deployUnit(s, 'A', 0, 0, 0, ev)
+    const atk = s.units.find((u) => u.team === 'A')!.def.attack
+    resolveCombat(s, 'A', ev)
+    expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - (atk + 6))
+  })
+
+  it('skill 3 (최후의일격) deals 45 to the enemy hero and can win', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = SKILL_UNLOCK_TURN[2]
+    s.skillsUsed.A = 2
+    s.heroHp.B = 40
+    usePlayerSkill(s)
+    expect(s.heroHp.B).toBe(0)
+    expect(s.winner).toBe('A')
+  })
+
+  it('rejects using a skill before it is unlocked (no-op)', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = 1
+    usePlayerSkill(s, 0)
+    expect(s.skillsUsed.A).toBe(0)
+  })
+})

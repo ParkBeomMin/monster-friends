@@ -302,9 +302,6 @@ export const DEFAULT_COMMANDER: CommanderDef = {
   ],
 }
 
-// Kept for backward compatibility with the UI (BattleScene), replaced in Task 4.
-export const SKILL_NAMES = DEFAULT_COMMANDER.skills.map((s) => s.name)
-
 // The next usable skill index for a team, or null if none is unlocked yet.
 export function nextSkillIndex(state: BattleState, team: TeamId): number | null {
   const used = state.skillsUsed[team]
@@ -357,7 +354,7 @@ function applySkill(
   state.skillsUsed[team] += 1
 }
 
-// Player (team A) uses their next unlocked skill. Skill 0 needs a targetLane.
+// Player (team A) uses their next unlocked skill. A skill may require a targetLane (skill.needsTarget).
 export function usePlayerSkill(state: BattleState, targetLane?: number): BattleEvent[] {
   const events: BattleEvent[] = []
   if (state.winner || state.active !== 'A') return events

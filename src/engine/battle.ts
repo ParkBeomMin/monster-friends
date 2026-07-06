@@ -1,5 +1,6 @@
 import type { UnitDef, TeamId } from './types'
 import { makeRng, shuffle, type Rng } from './prng'
+import { typeMultiplier } from './affinity'
 
 export interface BattleUnit {
   instanceId: string
@@ -128,9 +129,10 @@ export function resolveCombat(state: BattleState, team: TeamId, events: BattleEv
 
   for (const actor of actors) {
     if (!actor.alive || state.winner) continue
-    const damage = actor.def.attack + state.atkBonus[team]
+    const base = actor.def.attack + state.atkBonus[team]
     const foe = frontmostEnemy(state, team, actor.lane)
     if (foe) {
+      const damage = Math.round(base * typeMultiplier(actor.def, foe.def))
       foe.hp = Math.max(0, foe.hp - damage)
       events.push({
         type: 'attack',
@@ -145,12 +147,12 @@ export function resolveCombat(state: BattleState, team: TeamId, events: BattleEv
       }
     } else {
       const heroTeam = enemyOf(team)
-      state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - damage)
+      state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - base)
       events.push({
         type: 'heroDamage',
         attacker: actor.instanceId,
         heroTeam,
-        damage,
+        damage: base,
         heroHpAfter: state.heroHp[heroTeam],
       })
       if (state.heroHp[heroTeam] <= 0) {

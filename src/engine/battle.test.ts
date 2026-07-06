@@ -274,3 +274,16 @@ describe('desperation + AI skills', () => {
     expect(run()).toEqual(run())
   })
 })
+
+describe('resolveCombat applies affinity', () => {
+  it('an advantaged unit deals 1.3x rounded to an enemy unit', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    const ev: BE[] = []
+    // attacker mushroom/tank vs defender rock/ranged -> both advantages ~1.69
+    s.units.push({ instanceId: 'A#9', def: { id: 'x', name: 'x', role: 'tank', faction: 'mushroom', maxHp: 50, attack: 10, attackInterval: 1 }, team: 'A', lane: 0, col: 0, hp: 50, alive: true })
+    s.units.push({ instanceId: 'B#9', def: { id: 'y', name: 'y', role: 'ranged', faction: 'rock', maxHp: 50, attack: 5, attackInterval: 1 }, team: 'B', lane: 0, col: 0, hp: 50, alive: true })
+    resolveCombat(s, 'A', ev)
+    const foe = s.units.find((u) => u.instanceId === 'B#9')!
+    expect(foe.hp).toBe(50 - Math.round(10 * 1.69)) // 50 - 17 = 33
+  })
+})

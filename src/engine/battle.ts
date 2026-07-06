@@ -93,3 +93,59 @@ export function frontmostEnemy(state: BattleState, team: TeamId, lane: number): 
     .sort((a, b) => a.col - b.col)
   return foes[0] ?? null
 }
+
+export function deployUnit(
+  state: BattleState,
+  team: TeamId,
+  handIndex: number,
+  lane: number,
+  col: number,
+  events: BattleEvent[],
+): void {
+  const def = state.hands[team][handIndex]
+  if (!def) return
+  state.hands[team].splice(handIndex, 1)
+  const instanceId = `${team}#${state.nextInstance++}`
+  state.units.push({ instanceId, def, team, lane, col, hp: def.maxHp, alive: true })
+  events.push({ type: 'deploy', team, instanceId, lane, col })
+}
+
+export function resolveCombat(state: BattleState, team: TeamId, events: BattleEvent[]): void {
+  // Deterministic order: lane asc, then col asc.
+  const actors = state.units
+    .filter((u) => u.alive && u.team === team)
+    .sort((a, b) => (a.lane !== b.lane ? a.lane - b.lane : a.col - b.col))
+
+  for (const actor of actors) {
+    if (!actor.alive || state.winner) continue
+    const foe = frontmostEnemy(state, team, actor.lane)
+    if (foe) {
+      foe.hp = Math.max(0, foe.hp - actor.def.attack)
+      events.push({
+        type: 'attack',
+        attacker: actor.instanceId,
+        target: foe.instanceId,
+        damage: actor.def.attack,
+        targetHpAfter: foe.hp,
+      })
+      if (foe.hp <= 0 && foe.alive) {
+        foe.alive = false
+        events.push({ type: 'death', instanceId: foe.instanceId })
+      }
+    } else {
+      const heroTeam = enemyOf(team)
+      state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - actor.def.attack)
+      events.push({
+        type: 'heroDamage',
+        attacker: actor.instanceId,
+        heroTeam,
+        damage: actor.def.attack,
+        heroHpAfter: state.heroHp[heroTeam],
+      })
+      if (state.heroHp[heroTeam] <= 0) {
+        state.winner = team
+        events.push({ type: 'end', winner: team })
+      }
+    }
+  }
+}

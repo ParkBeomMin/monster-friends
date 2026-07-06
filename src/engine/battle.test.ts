@@ -36,3 +36,42 @@ describe('createBattle', () => {
     expect(emptyCells(s, 'A')).toHaveLength(DEFAULT_CONFIG.lanes * DEFAULT_CONFIG.cols)
   })
 })
+
+import { deployUnit, resolveCombat } from './battle'
+import type { BattleEvent } from './battle'
+
+describe('deployUnit + resolveCombat', () => {
+  it('a unit with no enemy in its lane damages the enemy hero', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    const ev: BattleEvent[] = []
+    deployUnit(s, 'A', 0, 2, 0, ev) // some lane, front
+    const atkUnit = s.units[0]
+    resolveCombat(s, 'A', ev)
+    expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp - atkUnit.def.attack)
+    expect(ev.some((e) => e.type === 'heroDamage' && e.heroTeam === 'B')).toBe(true)
+  })
+
+  it('a unit attacks the frontmost enemy in its own lane, not the hero', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    const ev: BattleEvent[] = []
+    deployUnit(s, 'B', 0, 1, 0, ev) // enemy in lane 1
+    deployUnit(s, 'A', 0, 1, 0, ev) // ally in lane 1
+    const foe = s.units.find((u) => u.team === 'B')!
+    const foeHpBefore = foe.hp
+    const ally = s.units.find((u) => u.team === 'A')!
+    resolveCombat(s, 'A', ev)
+    expect(foe.hp).toBe(foeHpBefore - ally.def.attack)
+    expect(s.heroHp.B).toBe(DEFAULT_CONFIG.heroHp) // hero untouched
+  })
+
+  it('reducing the enemy hero to 0 sets the winner and emits end', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.heroHp.B = 3
+    const ev: BattleEvent[] = []
+    deployUnit(s, 'A', 0, 0, 0, ev) // attack >= 5 per fixture
+    resolveCombat(s, 'A', ev)
+    expect(s.heroHp.B).toBe(0)
+    expect(s.winner).toBe('A')
+    expect(ev).toContainEqual({ type: 'end', winner: 'A' })
+  })
+})

@@ -37,6 +37,25 @@ export type BattleEvent =
   | { type: 'skill'; team: TeamId; skillIndex: number; targetLane?: number }
   | { type: 'desperation'; team: TeamId; heroDamage: number; selfCost: number }
 
+export type SkillEffect =
+  | { kind: 'laneDamage'; amount: number }
+  | { kind: 'teamAtkBonus'; amount: number }
+  | { kind: 'heroDamage'; amount: number }
+  | { kind: 'healHero'; amount: number }
+
+export interface SkillDef {
+  name: string
+  unlockTurn: number
+  effect: SkillEffect
+  needsTarget: boolean
+}
+
+export interface CommanderDef {
+  id: string
+  name: string
+  skills: SkillDef[]
+}
+
 export interface BattleState {
   config: BattleConfig
   units: BattleUnit[]
@@ -51,6 +70,7 @@ export interface BattleState {
   atkBonus: { A: number; B: number }
   skillsUsed: { A: number; B: number }
   desperations: { A: number; B: number }
+  commanders: { A: CommanderDef; B: CommanderDef }
   skillUsedThisTurn: boolean
 }
 
@@ -63,6 +83,7 @@ export function createBattle(
   deckB: UnitDef[],
   seed: number,
   config: BattleConfig = DEFAULT_CONFIG,
+  commanders: { A: CommanderDef; B: CommanderDef } = { A: DEFAULT_COMMANDER, B: DEFAULT_COMMANDER },
 ): BattleState {
   const rng = makeRng(seed)
   const dA = shuffle(rng, deckA)
@@ -81,6 +102,7 @@ export function createBattle(
     atkBonus: { A: 0, B: 0 },
     skillsUsed: { A: 0, B: 0 },
     desperations: { A: 0, B: 0 },
+    commanders,
     skillUsedThisTurn: false,
   }
 }
@@ -268,16 +290,26 @@ export function playerDeploy(
 }
 
 export const SKILL_UNLOCK_TURN = [2, 4, 6]
-export const SKILL_NAMES = ['집중포화', '진군나팔', '최후의일격']
-const SKILL1_LANE_DAMAGE = 18
-const SKILL2_ATK_BONUS = 6
-const SKILL3_HERO_DAMAGE = 45
+
+export const DEFAULT_COMMANDER: CommanderDef = {
+  id: 'default',
+  name: '기본 지휘관',
+  skills: [
+    { name: '집중포화', unlockTurn: SKILL_UNLOCK_TURN[0], effect: { kind: 'laneDamage', amount: 18 }, needsTarget: true },
+    { name: '진군나팔', unlockTurn: SKILL_UNLOCK_TURN[1], effect: { kind: 'teamAtkBonus', amount: 6 }, needsTarget: false },
+    { name: '최후의일격', unlockTurn: SKILL_UNLOCK_TURN[2], effect: { kind: 'heroDamage', amount: 45 }, needsTarget: false },
+  ],
+}
+
+// Kept for backward compatibility with the UI (BattleScene), replaced in Task 4.
+export const SKILL_NAMES = DEFAULT_COMMANDER.skills.map((s) => s.name)
 
 // The next usable skill index for a team, or null if none is unlocked yet.
 export function nextSkillIndex(state: BattleState, team: TeamId): number | null {
   const used = state.skillsUsed[team]
-  if (used >= 3) return null
-  if (state.turn < SKILL_UNLOCK_TURN[used]) return null
+  const skills = state.commanders[team].skills
+  if (used >= skills.length) return null
+  if (state.turn < skills[used].unlockTurn) return null
   return used
 }
 
@@ -288,34 +320,38 @@ function applySkill(
   targetLane: number,
   events: BattleEvent[],
 ): void {
-  events.push({ type: 'skill', team, skillIndex, targetLane })
-  if (skillIndex === 0) {
+  const skill = state.commanders[team].skills[skillIndex]
+  const e = skill.effect
+  events.push({ type: 'skill', team, skillIndex, targetLane: skill.needsTarget ? targetLane : undefined })
+  if (e.kind === 'laneDamage') {
     const foes = state.units.filter(
       (u) => u.alive && u.team === enemyOf(team) && u.lane === targetLane,
     )
     for (const foe of foes) {
-      foe.hp = Math.max(0, foe.hp - SKILL1_LANE_DAMAGE)
+      foe.hp = Math.max(0, foe.hp - e.amount)
       if (foe.hp <= 0 && foe.alive) {
         foe.alive = false
         events.push({ type: 'death', instanceId: foe.instanceId })
       }
     }
-  } else if (skillIndex === 1) {
-    state.atkBonus[team] += SKILL2_ATK_BONUS
-  } else if (skillIndex === 2) {
+  } else if (e.kind === 'teamAtkBonus') {
+    state.atkBonus[team] += e.amount
+  } else if (e.kind === 'heroDamage') {
     const heroTeam = enemyOf(team)
-    state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - SKILL3_HERO_DAMAGE)
+    state.heroHp[heroTeam] = Math.max(0, state.heroHp[heroTeam] - e.amount)
     events.push({
       type: 'heroDamage',
       attacker: `${team}:commander`,
       heroTeam,
-      damage: SKILL3_HERO_DAMAGE,
+      damage: e.amount,
       heroHpAfter: state.heroHp[heroTeam],
     })
     if (state.heroHp[heroTeam] <= 0) {
       state.winner = team
       events.push({ type: 'end', winner: team })
     }
+  } else if (e.kind === 'healHero') {
+    state.heroHp[team] = Math.min(state.config.heroHp, state.heroHp[team] + e.amount)
   }
   state.skillsUsed[team] += 1
 }
@@ -327,7 +363,8 @@ export function usePlayerSkill(state: BattleState, targetLane?: number): BattleE
   if (state.skillUsedThisTurn) return events
   const idx = nextSkillIndex(state, 'A')
   if (idx === null) return events
-  if (idx === 0) {
+  const skill = state.commanders.A.skills[idx]
+  if (skill.needsTarget) {
     if (targetLane === undefined || targetLane < 0 || targetLane >= state.config.lanes) return events
   }
   applySkill(state, 'A', idx, targetLane ?? 0, events)

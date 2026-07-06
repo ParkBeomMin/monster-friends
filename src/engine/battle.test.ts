@@ -287,3 +287,43 @@ describe('resolveCombat applies affinity', () => {
     expect(foe.hp).toBe(50 - Math.round(10 * 1.69)) // 50 - 17 = 33
   })
 })
+
+import type { CommanderDef } from './battle'
+
+describe('data-driven commanders', () => {
+  const healer: CommanderDef = {
+    id: 'healer',
+    name: '치유사',
+    skills: [
+      { name: '재생', unlockTurn: 2, effect: { kind: 'healHero', amount: 40 }, needsTarget: false },
+      { name: '강화', unlockTurn: 4, effect: { kind: 'teamAtkBonus', amount: 8 }, needsTarget: false },
+      { name: '분쇄', unlockTurn: 6, effect: { kind: 'heroDamage', amount: 30 }, needsTarget: false },
+    ],
+  }
+
+  it('healHero restores own hero HP up to the max', () => {
+    const s = createBattle(deck(8), deck(8), 1, DEFAULT_CONFIG, { A: healer, B: healer })
+    s.turn = 2
+    s.heroHp.A = 50
+    usePlayerSkill(s)
+    expect(s.heroHp.A).toBe(90) // 50 + 40
+    expect(s.skillsUsed.A).toBe(1)
+  })
+
+  it('heal does not exceed the config max hero HP', () => {
+    const s = createBattle(deck(8), deck(8), 1, DEFAULT_CONFIG, { A: healer, B: healer })
+    s.turn = 2
+    s.heroHp.A = 100
+    usePlayerSkill(s)
+    expect(s.heroHp.A).toBe(DEFAULT_CONFIG.heroHp) // capped at 120
+  })
+
+  it('default commander (no arg) still deals 18 lane / +6 / 45 hero (back-compat)', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    s.turn = 6
+    s.skillsUsed.A = 2
+    s.heroHp.B = 50
+    usePlayerSkill(s)
+    expect(s.heroHp.B).toBe(5) // 50 - 45
+  })
+})

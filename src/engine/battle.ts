@@ -198,6 +198,7 @@ export function playerDeploy(
   const events: BattleEvent[] = []
   if (state.winner || state.active !== 'A') return events
   if (handIndex < 0 || handIndex >= state.hands.A.length) return events
+  if (lane < 0 || lane >= state.config.lanes || col < 0 || col >= state.config.cols) return events
   const occupied = state.units.some(
     (u) => u.alive && u.team === 'A' && u.lane === lane && u.col === col,
   )

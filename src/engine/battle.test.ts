@@ -97,6 +97,17 @@ describe('playerDeploy turn flow', () => {
     expect(s.turn).toBe(2)
   })
 
+  it('rejects an out-of-bounds cell (no-op)', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    const before = s.units.length
+    playerDeploy(s, 0, -1, 0) // lane out of range
+    playerDeploy(s, 0, 0, 99) // col out of range
+    playerDeploy(s, 0, DEFAULT_CONFIG.lanes, 0) // lane == lanes (off by one)
+    expect(s.units.length).toBe(before) // nothing deployed, turn not advanced
+    expect(s.turn).toBe(1)
+    expect(s.active).toBe('A')
+  })
+
   it('is fully deterministic — same seed + same actions gives identical event logs', () => {
     const run = () => {
       const s = createBattle(deck(8), deck(8), 77)

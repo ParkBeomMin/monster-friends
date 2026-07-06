@@ -225,7 +225,8 @@ function aiSkillLane(state: BattleState): number {
 function aiTurn(state: BattleState, events: BattleEvent[]): void {
   const skillIdx = nextSkillIndex(state, 'B')
   if (skillIdx !== null) {
-    const lane = skillIdx === 0 ? aiSkillLane(state) : 0
+    const skill = state.commanders.B.skills[skillIdx]
+    const lane = skill.needsTarget ? aiSkillLane(state) : 0
     applySkill(state, 'B', skillIdx, lane, events)
   }
   if (state.winner) return

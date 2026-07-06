@@ -327,3 +327,41 @@ describe('data-driven commanders', () => {
     expect(s.heroHp.B).toBe(5) // 50 - 45
   })
 })
+
+import { DEFAULT_COMMANDER } from './battle'
+
+describe('aiTurn targets by skill.needsTarget, not skill index', () => {
+  it('uses aiSkillLane (not lane 0) when the AI targeted skill sits at a non-zero index', () => {
+    // B's skill 0 is a non-targeted dummy; the real (targeted) laneDamage skill is index 1.
+    const gaiaLike: CommanderDef = {
+      id: 'gaia-test',
+      name: '테스트 지휘관',
+      skills: [
+        { name: '더미', unlockTurn: 1, effect: { kind: 'teamAtkBonus', amount: 0 }, needsTarget: false },
+        { name: '대지분쇄', unlockTurn: 1, effect: { kind: 'laneDamage', amount: 15 }, needsTarget: true },
+      ],
+    }
+    const s = createBattle(deck(8), deck(8), 1, DEFAULT_CONFIG, { A: DEFAULT_COMMANDER, B: gaiaLike })
+    // Simulate B having already used skill 0; skill index 1 (targeted) is next up.
+    s.skillsUsed.B = 1
+    // Keep the AI from deploying/attacking this turn so resolveCombat('B', ...) can't
+    // muddy the HP numbers we're asserting on.
+    s.hands.B = []
+    s.decks.B = []
+
+    // Lane 2 has the most A units, so aiSkillLane(state) must resolve to lane 2.
+    s.units.push({ instanceId: 'A#lane2a', def: unit('u', 100, 5), team: 'A', lane: 2, col: 0, hp: 100, alive: true })
+    s.units.push({ instanceId: 'A#lane2b', def: unit('u', 100, 5), team: 'A', lane: 2, col: 1, hp: 100, alive: true })
+
+    // Player deploys into lane 0 (fewer units there), then ends the turn — triggering aiTurn.
+    playerDeploy(s, 0, 0, 0)
+
+    const lane2Unit = s.units.find((u) => u.instanceId === 'A#lane2a')!
+    const lane0Unit = s.units.find((u) => u.team === 'A' && u.lane === 0)!
+
+    // Old buggy logic (`skillIdx === 0 ? aiSkillLane(state) : 0`) would target lane 0 here,
+    // since the targeted skill is at index 1. The fix must target lane 2 instead.
+    expect(lane2Unit.hp).toBe(85) // 100 - 15 laneDamage: proves aiSkillLane (lane 2) was targeted
+    expect(lane0Unit.hp).toBe(lane0Unit.def.maxHp) // lane 0 untouched by the skill
+  })
+})

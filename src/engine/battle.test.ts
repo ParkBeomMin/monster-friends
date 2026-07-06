@@ -119,4 +119,22 @@ describe('playerDeploy turn flow', () => {
     }
     expect(run()).toEqual(run())
   })
+
+  it('resolves by hero HP instead of freezing when the player runs out of hand and deck', () => {
+    const s = createBattle(deck(8), deck(8), 1)
+    const lowAttackUnit = unit('low-atk', 999, 1)
+    // Player has exactly one card left and an empty deck — after playing it,
+    // A has no cards in hand and no cards to draw, so A has no legal move.
+    s.hands.A = [lowAttackUnit]
+    s.decks.A = []
+    // High hero HP + low attack so nobody dies from this single exchange.
+    s.heroHp.A = 1000
+    s.heroHp.B = 1000
+
+    playerDeploy(s, 0, 0, 0) // deploy the last card into an empty lane
+
+    // The active-player-has-no-legal-move rule must resolve the game by
+    // comparing hero HP, not leave it frozen with winner === null forever.
+    expect(s.winner).not.toBeNull()
+  })
 })

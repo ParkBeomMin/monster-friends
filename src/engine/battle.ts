@@ -182,6 +182,10 @@ function aiTurn(state: BattleState, events: BattleEvent[]): void {
   resolveCombat(state, 'B', events)
 }
 
+function hasLegalMove(state: BattleState, team: TeamId): boolean {
+  return state.hands[team].length > 0 && emptyCells(state, team).length > 0
+}
+
 function finishByHero(state: BattleState, events: BattleEvent[]): void {
   const winner: TeamId | 'draw' =
     state.heroHp.A > state.heroHp.B ? 'A' : state.heroHp.B > state.heroHp.A ? 'B' : 'draw'
@@ -215,6 +219,10 @@ export function playerDeploy(
   state.turn += 1
   state.active = 'A'
   drawToHand(state, 'A')
-  if (state.turn > state.config.maxTurns) finishByHero(state, events)
+  if (state.turn > state.config.maxTurns) {
+    finishByHero(state, events)
+  } else if (!state.winner && !hasLegalMove(state, 'A')) {
+    finishByHero(state, events)
+  }
   return events
 }

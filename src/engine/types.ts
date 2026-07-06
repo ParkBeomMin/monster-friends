@@ -2,16 +2,6 @@ export type Role = 'tank' | 'melee' | 'ranged' | 'support'
 export type Faction = 'mushroom' | 'fairy' | 'rock' | 'toy' | 'snow'
 export type TeamId = 'A' | 'B'
 
-export type Row = 'front' | 'back'
-export interface Position {
-  row: Row
-  col: number
-}
-export interface Placement {
-  def: UnitDef
-  pos: Position
-}
-
 export interface UnitDef {
   id: string
   name: string
@@ -20,33 +10,4 @@ export interface UnitDef {
   maxHp: number
   attack: number
   attackInterval: number // ticks between attacks, must be >= 1
-}
-
-export interface UnitState {
-  instanceId: string // unique per battle, format: `${team}#${slot}`
-  def: UnitDef
-  team: TeamId
-  slot: number
-  pos: Position // board position; targeting depends on it
-  hp: number
-  cooldown: number // ticks remaining until next attack
-  alive: boolean
-}
-
-export type BattleEvent =
-  | {
-      type: 'attack'
-      tick: number
-      attacker: string // instanceId
-      target: string // instanceId
-      damage: number
-      targetHpAfter: number
-    }
-  | { type: 'death'; tick: number; unit: string }
-  | { type: 'end'; tick: number; winner: TeamId | 'draw' }
-
-export interface BattleResult {
-  winner: TeamId | 'draw'
-  ticks: number
-  events: BattleEvent[]
 }

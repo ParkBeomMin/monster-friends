@@ -1,8 +1,9 @@
 import Phaser from 'phaser'
 import type { BattleState, BattleUnit } from '../engine/battle'
-import { createBattle, playerDeploy, usePlayerSkill, usePlayerDesperation, nextSkillIndex, SKILL_NAMES, DEFAULT_CONFIG } from '../engine/battle'
+import { createBattle, playerDeploy, usePlayerSkill, usePlayerDesperation, nextSkillIndex, DEFAULT_CONFIG } from '../engine/battle'
 import type { TeamId } from '../engine/types'
-import { PLAYER_DECK, ENEMY_DECK } from '../data/decks'
+import { PLAYER_DECK, ENEMY_DECK } from '../data/roster'
+import { AGNI, GAIA } from '../data/commanders'
 import { cellXY, heroXY, LANES, COLS, LOGICAL_W, LOGICAL_H } from './layout'
 
 const SEED = 20260706
@@ -18,7 +19,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create() {
-    this.state = createBattle(PLAYER_DECK, ENEMY_DECK, SEED, DEFAULT_CONFIG)
+    this.state = createBattle(PLAYER_DECK, ENEMY_DECK, SEED, DEFAULT_CONFIG, { A: AGNI, B: GAIA })
     this.selectedHand = null
     this.redraw()
   }
@@ -115,11 +116,12 @@ export class BattleScene extends Phaser.Scene {
   private drawSkills() {
     const baseX = 8
     let y = 396
-    SKILL_NAMES.forEach((name, i) => {
+    const skills = this.state.commanders.A.skills
+    skills.forEach((skill, i) => {
       const used = i < this.state.skillsUsed.A
       const available =
         !this.state.winner && nextSkillIndex(this.state, 'A') === i && !this.state.skillUsedThisTurn
-      const label = used ? `✔ ${name}` : available ? `▶ ${name}` : `🔒 ${name}`
+      const label = used ? `✔ ${skill.name}` : available ? `▶ ${skill.name}` : `🔒 ${skill.name}`
       const color = used ? 0x333333 : available ? 0x4a6a2a : 0x2a2a2a
       const btn = this.track(this.add.rectangle(baseX + 70, y, 140, 30, color).setStrokeStyle(1, 0x557755))
       this.track(this.add.text(baseX + 8, y - 9, label, { fontSize: '13px', color: '#dfd' }))
@@ -143,8 +145,7 @@ export class BattleScene extends Phaser.Scene {
 
   private onSkillTap(i: number) {
     if (this.state.winner) return
-    if (i === 0) {
-      // Skill 0 needs a target lane — enter targeting mode.
+    if (this.state.commanders.A.skills[i].needsTarget) {
       this.targetingSkill = true
       this.redraw()
       return
